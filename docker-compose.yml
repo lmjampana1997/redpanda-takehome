@@ -1,0 +1,93 @@
+services:
+  # Single-node Redpanda broker (dev-container mode: no separate config needed).
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --mode=dev-container
+      - --smp=1
+      - --overprovisioned
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Redpanda Connect: SSE input -> filter -> enrichment -> wiki.edits.enriched
+  # STUB: pipeline.yaml not yet implemented (milestone 2/3).
+  connect:
+    image: docker.redpanda.com/redpandadata/connect:latest
+    container_name: connect
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    volumes:
+      - ./connect:/connect
+    command: ["run", "/connect/pipeline.yaml"]
+    env_file:
+      - .env
+
+  # Ollama local LLM server (default provider, no API keys required).
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
+  # Reasoning service: consumes wiki.edits.enriched, runs the multi-step
+  # extraction/classification/escalation loop, writes results to Postgres.
+  # STUB: app not yet implemented (milestones 5-9).
+  reasoning_service:
+    build: ./reasoning_service
+    container_name: reasoning_service
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-wiki_edits}
+      POSTGRES_USER: ${POSTGRES_USER:-wiki}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wiki}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wiki}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Serve layer: JSON/web endpoint reading classifications from Postgres.
+  # STUB: app not yet implemented (milestone 11).
+  serve_layer:
+    build: ./serve_layer
+    container_name: serve_layer
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+
+volumes:
+  postgres-data:
+  ollama-data:

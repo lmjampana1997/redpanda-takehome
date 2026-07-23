@@ -1,0 +1,8 @@
+# Redpanda Connect pipeline. STUB — SSE input, filtering, and enrichment
+# are implemented in milestones 2-3.
+#
+# Planned shape:
+#   input: SSE from https://stream.wikimedia.org/v2/stream/recentchange
+#   pipeline: strip `data: ` prefix, parse_json().catch(deleted()), filter
+#     bots/non-mainspace/heartbeats, enrich via Wikipedia compare API
+#   output: wiki.edits.enriched topic on the redpanda broker

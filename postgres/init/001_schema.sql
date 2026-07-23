@@ -1,0 +1,5 @@
+-- Postgres schema. STUB — implemented in milestone 4.
+-- Planned: revisions table keyed on revision id (PK) for UPSERT-friendly
+-- writes, storing article title, namespace, comment, editor, label,
+-- confidence, mismatch_flag, status, diff excerpt, raw model output,
+-- and ISO-formatted timestamps.
