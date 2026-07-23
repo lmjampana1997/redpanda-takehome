@@ -1,8 +1,62 @@
-# Redpanda Connect pipeline. STUB — SSE input, filtering, and enrichment
-# are implemented in milestones 2-3.
+# Redpanda Connect pipeline.
 #
-# Planned shape:
-#   input: SSE from https://stream.wikimedia.org/v2/stream/recentchange
-#   pipeline: strip `data: ` prefix, parse_json().catch(deleted()), filter
-#     bots/non-mainspace/heartbeats, enrich via Wikipedia compare API
-#   output: wiki.edits.enriched topic on the redpanda broker
+# Milestone 2 (this state): SSE ingestion + filtering only.
+#   input:  Wikipedia recentchange SSE stream
+#   filter: drop non-JSON/heartbeat lines, bots, non-mainspace namespaces,
+#           non-edit event types, and non-English-Wikipedia items
+#   output: wiki.edits.filtered topic (raw, unenriched records)
+#
+# Milestone 3 will add an enrichment branch (diff fetch) and switch the
+# output to wiki.edits.enriched.
+
+input:
+  http_client:
+    url: "https://stream.wikimedia.org/v2/stream/recentchange"
+    verb: GET
+    headers:
+      User-Agent: "${WIKI_USER_AGENT}"
+    stream:
+      enabled: true
+      reconnect: true
+      scanner:
+        lines: {}
+
+pipeline:
+  processors:
+    # SSE lines look like `data: {...}`, `event: message`, `id: ...`, or
+    # blank keep-alive lines. Only `data: ` lines carry a JSON payload;
+    # everything else gets dropped here before we ever try to parse it.
+    - mapping: |
+        let raw = content().string()
+        let stripped = $raw.trim_prefix("data: ")
+        root = if $stripped == $raw {
+          deleted()
+        } else {
+          $stripped
+        }
+
+    # Bloblang doesn't fail-closed inside `if`, so a stray non-JSON payload
+    # would otherwise pass through as a raw string and break every processor
+    # downstream. `.catch(deleted())` drops the message instead of erroring.
+    - mapping: |
+        root = content().string().parse_json().catch(deleted())
+
+    # Filter before the model: bots, non-mainspace namespaces, non-"edit"
+    # event types (page creations/log entries don't have a prior revision
+    # to diff against), and anything outside English Wikipedia.
+    - mapping: |
+        root = if this.bot == true ||
+                  this.namespace != 0 ||
+                  this.type != "edit" ||
+                  this.wiki != "enwiki" {
+          deleted()
+        } else {
+          this
+        }
+
+output:
+  redpanda:
+    seed_brokers:
+      - "${REDPANDA_BROKERS}"
+    topic: "${TOPIC_FILTERED}"
+    key: "${! this.revision.new.int64().string() }"

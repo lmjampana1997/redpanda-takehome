@@ -20,8 +20,8 @@ services:
       timeout: 5s
       retries: 10
 
-  # Redpanda Connect: SSE input -> filter -> enrichment -> wiki.edits.enriched
-  # STUB: pipeline.yaml not yet implemented (milestone 2/3).
+  # Redpanda Connect: SSE input -> filter -> wiki.edits.filtered (milestone 2).
+  # Enrichment branch -> wiki.edits.enriched lands in milestone 3.
   connect:
     image: docker.redpanda.com/redpandadata/connect:latest
     container_name: connect

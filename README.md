@@ -33,7 +33,7 @@ Postgres  --->  Serve layer (web/JSON)
 Built incrementally, milestone by milestone. See commit history for progress.
 
 - [x] Milestone 1: Repo scaffold
-- [ ] Milestone 2: Redpanda + Connect SSE ingestion & filtering
+- [x] Milestone 2: Redpanda + Connect SSE ingestion & filtering
 - [ ] Milestone 3: Connect enrichment branch (diff fetch)
 - [ ] Milestone 4: Postgres schema + migration
 - [ ] Milestone 5: Reasoning service skeleton (consumer)
