@@ -20,8 +20,8 @@ services:
       timeout: 5s
       retries: 10
 
-  # Redpanda Connect: SSE input -> filter -> wiki.edits.filtered (milestone 2).
-  # Enrichment branch -> wiki.edits.enriched lands in milestone 3.
+  # Redpanda Connect: SSE input -> filter -> enrichment branch (diff fetch)
+  # -> wiki.edits.enriched.
   connect:
     image: docker.redpanda.com/redpandadata/connect:latest
     container_name: connect

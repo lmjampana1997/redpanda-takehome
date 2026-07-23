@@ -1,13 +1,17 @@
 # Redpanda Connect pipeline.
 #
-# Milestone 2 (this state): SSE ingestion + filtering only.
-#   input:  Wikipedia recentchange SSE stream
-#   filter: drop non-JSON/heartbeat lines, bots, non-mainspace namespaces,
-#           non-edit event types, and non-English-Wikipedia items
-#   output: wiki.edits.filtered topic (raw, unenriched records)
+# Milestone 3 (this state): SSE ingestion + filtering + enrichment.
+#   input:   Wikipedia recentchange SSE stream
+#   filter:  drop non-JSON/heartbeat lines, bots, non-mainspace namespaces,
+#            non-edit event types, and non-English-Wikipedia items
+#   enrich:  fetch the real diff (action=compare) for each surviving edit
+#            and attach the raw diff HTML to the record
+#   output:  wiki.edits.enriched topic
 #
-# Milestone 3 will add an enrichment branch (diff fetch) and switch the
-# output to wiki.edits.enriched.
+# Deliberately NOT stripping HTML tags out of the diff here. Turning a diff
+# table into "what was added/removed" is extraction logic that belongs in
+# the reasoning service (real HTML parsing, not a lossy Bloblang regex) —
+# Connect's job stops at plumbing + attaching the raw material.
 
 input:
   http_client:
@@ -20,6 +24,14 @@ input:
       reconnect: true
       scanner:
         lines: {}
+
+rate_limit_resources:
+  # Wikipedia asks bot-like clients to keep request rates modest; this
+  # caps our diff-fetch calls regardless of how fast the SSE firehose runs.
+  - label: wikipedia_api_rl
+    local:
+      count: 10
+      interval: 1s
 
 pipeline:
   processors:
@@ -54,9 +66,31 @@ pipeline:
           this
         }
 
+    # Enrichment: fetch the actual diff via the Wikipedia compare API.
+    # request_map builds the child request; result_map grafts the response
+    # back onto the original record (partial root.X assignments are correct
+    # here — branch inverts the "rebuild root from scratch" rule).
+    - branch:
+        request_map: |
+          # .int64().string() avoids scientific-notation rendering of large
+          # revision IDs when they're interpolated into the URL below.
+          root.fromrev = this.revision.old.int64().string()
+          root.torev = this.revision.new.int64().string()
+        processors:
+          - http:
+              url: 'https://en.wikipedia.org/w/api.php?action=compare&format=json&formatversion=2&prop=diff&fromrev=${! this.fromrev }&torev=${! this.torev }'
+              verb: GET
+              rate_limit: wikipedia_api_rl
+              headers:
+                User-Agent: "${WIKI_USER_AGENT}"
+        result_map: |
+          let diff = this.compare.body.catch(null)
+          root.diff_html = $diff
+          root.diff_fetch_ok = $diff != null
+
 output:
   redpanda:
     seed_brokers:
       - "${REDPANDA_BROKERS}"
-    topic: "${TOPIC_FILTERED}"
+    topic: "${TOPIC_ENRICHED}"
     key: "${! this.revision.new.int64().string() }"
