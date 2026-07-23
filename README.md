@@ -35,7 +35,7 @@ Built incrementally, milestone by milestone. See commit history for progress.
 - [x] Milestone 1: Repo scaffold
 - [x] Milestone 2: Redpanda + Connect SSE ingestion & filtering
 - [x] Milestone 3: Connect enrichment branch (diff fetch)
-- [ ] Milestone 4: Postgres schema + migration
+- [x] Milestone 4: Postgres schema + migration
 - [ ] Milestone 5: Reasoning service skeleton (consumer)
 - [ ] Milestone 6: Extraction + mismatch check LLM call
 - [ ] Milestone 7: Classification call
