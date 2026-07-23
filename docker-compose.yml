@@ -43,9 +43,9 @@ services:
     volumes:
       - ollama-data:/root/.ollama
 
-  # Reasoning service: consumes wiki.edits.enriched, runs the multi-step
-  # extraction/classification/escalation loop, writes results to Postgres.
-  # STUB: app not yet implemented (milestones 5-9).
+  # Reasoning service: consumes wiki.edits.enriched (milestone 5 — logs only
+  # so far). Extraction/classification/escalation/write-path land in
+  # milestones 6-9.
   reasoning_service:
     build: ./reasoning_service
     container_name: reasoning_service

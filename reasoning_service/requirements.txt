@@ -1,1 +1,2 @@
-# Populated incrementally as milestones land (kafka client, psycopg, httpx, llm client, etc.)
+confluent-kafka==2.6.1
+
