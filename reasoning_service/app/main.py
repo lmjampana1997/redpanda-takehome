@@ -1,8 +1,9 @@
 """Reasoning service entrypoint.
 
-Milestone 5 (this state): connects to Redpanda as a consumer, reads from
-wiki.edits.enriched, and logs what it receives. No LLM calls yet — those
-land in milestones 6-9 (extraction, classification, escalation, write path).
+Milestone 6 (this state): consumes wiki.edits.enriched and runs the
+extraction step (one LLM call: added/removed facts, citation/revert flags,
+comment/diff mismatch check) on each record. Classification, escalation,
+and the Postgres write path land in milestones 7-9.
 """
 
 import logging
@@ -11,6 +12,8 @@ import threading
 
 from app.config import load_settings
 from app.consumer import build_consumer, iter_enriched_records
+from app.extraction import extract_facts
+from app.llm_client import build_llm_client
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,11 +34,14 @@ def main() -> None:
     signal.signal(signal.SIGINT, handle_shutdown)
 
     logger.info(
-        "Starting reasoning service: brokers=%s topic=%s group=%s",
+        "Starting reasoning service: brokers=%s topic=%s group=%s llm_provider=%s",
         settings.redpanda_brokers,
         settings.topic_enriched,
         settings.consumer_group_id,
+        settings.llm_provider,
     )
+
+    llm_client = build_llm_client(settings)
 
     consumer = build_consumer(settings)
     try:
@@ -49,6 +55,16 @@ def main() -> None:
                 record.get("comment"),
                 record.get("diff_fetch_ok"),
                 len(record.get("diff_html") or ""),
+            )
+
+            facts, extraction_ok, _raw = extract_facts(
+                llm_client, record.get("comment"), record.get("diff_html")
+            )
+            logger.info(
+                "revision=%s extraction_ok=%s facts=%s",
+                key,
+                extraction_ok,
+                facts,
             )
     finally:
         consumer.close()
