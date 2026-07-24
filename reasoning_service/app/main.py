@@ -1,15 +1,15 @@
 """Reasoning service entrypoint.
 
-Milestone 6 (this state): consumes wiki.edits.enriched and runs the
-extraction step (one LLM call: added/removed facts, citation/revert flags,
-comment/diff mismatch check) on each record. Classification, escalation,
-and the Postgres write path land in milestones 7-9.
+Milestone 7 (this state): consumes wiki.edits.enriched, runs the extraction
+step, then classifies each record from the extracted facts (label +
+confidence). Escalation and the Postgres write path land in milestones 8-9.
 """
 
 import logging
 import signal
 import threading
 
+from app.classification import classify_facts
 from app.config import load_settings
 from app.consumer import build_consumer, iter_enriched_records
 from app.extraction import extract_facts
@@ -65,6 +65,16 @@ def main() -> None:
                 key,
                 extraction_ok,
                 facts,
+            )
+
+            result, classification_ok, _raw = classify_facts(llm_client, facts)
+            logger.info(
+                "revision=%s classification_ok=%s label=%s confidence=%.2f reasoning=%r",
+                key,
+                classification_ok,
+                result["label"],
+                result["confidence"],
+                result["reasoning"],
             )
     finally:
         consumer.close()
