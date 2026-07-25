@@ -1,1 +1,3 @@
-# Populated in milestone 11 (fastapi, uvicorn, psycopg, etc.)
+fastapi==0.115.4
+uvicorn==0.32.0
+psycopg[binary]==3.2.3

@@ -75,8 +75,8 @@ services:
       timeout: 5s
       retries: 10
 
-  # Serve layer: JSON/web endpoint reading classifications from Postgres.
-  # STUB: app not yet implemented (milestone 11).
+  # Serve layer: JSON/web endpoint reading classifications from Postgres
+  # (milestone 11) — filterable by label/status, review items highlighted.
   serve_layer:
     build: ./serve_layer
     container_name: serve_layer
