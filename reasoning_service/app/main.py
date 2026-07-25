@@ -1,9 +1,10 @@
 """Reasoning service entrypoint.
 
-Milestone 8 (this state): consumes wiki.edits.enriched, extracts facts,
-classifies, and — for low-confidence or comment/diff-mismatch cases — runs a
-second, deeper reclassification pass with the editor's account context. The
-Postgres write path lands in milestone 9.
+Milestone 9 (this state): consumes wiki.edits.enriched, extracts facts,
+classifies, escalates low-confidence/mismatch-flagged records with editor
+context, then UPSERTs the result into Postgres — vandalism-labeled or
+mismatch-flagged items land in 'review' status, everything else in
+'classified'.
 """
 
 import logging
@@ -13,6 +14,8 @@ import threading
 from app.classification import classify_facts
 from app.config import load_settings
 from app.consumer import build_consumer, iter_enriched_records
+from app.db import connect, upsert_classification
+from app.diff_parser import format_diff_for_prompt
 from app.escalation import escalate_and_reclassify, should_escalate
 from app.extraction import extract_facts
 from app.llm_client import build_llm_client
@@ -44,6 +47,7 @@ def main() -> None:
     )
 
     llm_client = build_llm_client(settings)
+    db_conn = connect(settings)
 
     consumer = build_consumer(settings)
     try:
@@ -69,7 +73,7 @@ def main() -> None:
                 facts,
             )
 
-            result, classification_ok, _raw = classify_facts(llm_client, facts)
+            result, classification_ok, raw_model_output = classify_facts(llm_client, facts)
             logger.info(
                 "revision=%s classification_ok=%s label=%s confidence=%.2f reasoning=%r",
                 key,
@@ -79,9 +83,8 @@ def main() -> None:
                 result["reasoning"],
             )
 
-            escalated = should_escalate(facts, result)
-            if escalated:
-                result, editor_info, escalation_ok, _raw = escalate_and_reclassify(
+            if should_escalate(facts, result):
+                result, editor_info, escalation_ok, raw_model_output = escalate_and_reclassify(
                     llm_client,
                     settings.wiki_user_agent,
                     record.get("user"),
@@ -98,8 +101,15 @@ def main() -> None:
                     result["confidence"],
                     result["reasoning"],
                 )
+
+            diff_excerpt = format_diff_for_prompt(record.get("diff_html"))
+            status = upsert_classification(
+                db_conn, record, facts, result, raw_model_output, diff_excerpt
+            )
+            logger.info("revision=%s upserted status=%s", key, status)
     finally:
         consumer.close()
+        db_conn.close()
         logger.info("Consumer closed, exiting.")
 
 

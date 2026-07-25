@@ -44,8 +44,8 @@ services:
       - ollama-data:/root/.ollama
 
   # Reasoning service: consumes wiki.edits.enriched, runs extraction,
-  # classification, and confidence-gated escalation (milestones 6-8). The
-  # Postgres write path lands in milestone 9.
+  # classification, confidence-gated escalation, and UPSERTs the result
+  # into Postgres (milestones 6-9).
   reasoning_service:
     build: ./reasoning_service
     container_name: reasoning_service
