@@ -22,6 +22,13 @@ def build_consumer(settings: Settings) -> Consumer:
             # bump) doesn't skip whatever's already sitting on the topic.
             "auto.offset.reset": "earliest",
             "enable.auto.commit": True,
+            # Processing a single record can involve up to three sequential
+            # LLM calls (extraction, classification, escalation), each with
+            # one retry and a 120s timeout — worst case, tens of minutes
+            # under CPU contention on a local model. The 5-minute default
+            # here would otherwise evict this consumer mid-record and crash
+            # the service with a fatal _MAX_POLL_EXCEEDED.
+            "max.poll.interval.ms": 1800000,
         }
     )
 

@@ -1,8 +1,9 @@
 """Reasoning service entrypoint.
 
-Milestone 7 (this state): consumes wiki.edits.enriched, runs the extraction
-step, then classifies each record from the extracted facts (label +
-confidence). Escalation and the Postgres write path land in milestones 8-9.
+Milestone 8 (this state): consumes wiki.edits.enriched, extracts facts,
+classifies, and — for low-confidence or comment/diff-mismatch cases — runs a
+second, deeper reclassification pass with the editor's account context. The
+Postgres write path lands in milestone 9.
 """
 
 import logging
@@ -12,6 +13,7 @@ import threading
 from app.classification import classify_facts
 from app.config import load_settings
 from app.consumer import build_consumer, iter_enriched_records
+from app.escalation import escalate_and_reclassify, should_escalate
 from app.extraction import extract_facts
 from app.llm_client import build_llm_client
 
@@ -76,6 +78,26 @@ def main() -> None:
                 result["confidence"],
                 result["reasoning"],
             )
+
+            escalated = should_escalate(facts, result)
+            if escalated:
+                result, editor_info, escalation_ok, _raw = escalate_and_reclassify(
+                    llm_client,
+                    settings.wiki_user_agent,
+                    record.get("user"),
+                    facts,
+                    result,
+                )
+                logger.info(
+                    "revision=%s escalated=True editor_info=%s escalation_ok=%s "
+                    "label=%s confidence=%.2f reasoning=%r",
+                    key,
+                    editor_info,
+                    escalation_ok,
+                    result["label"],
+                    result["confidence"],
+                    result["reasoning"],
+                )
     finally:
         consumer.close()
         logger.info("Consumer closed, exiting.")

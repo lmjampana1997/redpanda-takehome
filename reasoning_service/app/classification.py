@@ -35,7 +35,7 @@ Respond with a single JSON object with EXACTLY these fields and no others:
 
 Respond with ONLY the JSON object. No explanation, no markdown fences, no text before or after it."""
 
-_FALLBACK: dict[str, Any] = {
+CLASSIFICATION_FALLBACK: dict[str, Any] = {
     "label": "unclear",
     "confidence": 0.0,
     "reasoning": "",
@@ -50,7 +50,10 @@ def _coerce_confidence(value: Any) -> float:
     return max(0.0, min(1.0, confidence))
 
 
-def _normalize(parsed: dict) -> dict:
+def normalize_classification(parsed: dict) -> dict:
+    """Shared by the cheap classification pass and escalation's deeper pass
+    (same output shape, same enum guard) so both label/confidence handling
+    stays in one place."""
     label = str(parsed.get("label", "")).strip().lower()
     if label not in VALID_LABELS:
         logger.warning("Model produced label outside the enum: %r — normalizing to 'unclear'", label)
@@ -79,8 +82,8 @@ def classify_facts(llm_client: LLMClient, facts: dict) -> tuple[dict, bool, str]
     def call() -> str:
         return llm_client.complete(CLASSIFICATION_SYSTEM_PROMPT, user_prompt)
 
-    parsed, ok, raw = call_llm_with_json_retry(call, _FALLBACK)
-    result = _normalize(parsed) if ok else dict(_FALLBACK)
+    parsed, ok, raw = call_llm_with_json_retry(call, CLASSIFICATION_FALLBACK)
+    result = normalize_classification(parsed) if ok else dict(CLASSIFICATION_FALLBACK)
     if not ok:
         logger.warning("Classification fell back to defaults after retry. Raw output: %r", raw[:500])
     return result, ok, raw

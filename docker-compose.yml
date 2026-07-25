@@ -43,9 +43,9 @@ services:
     volumes:
       - ollama-data:/root/.ollama
 
-  # Reasoning service: consumes wiki.edits.enriched, runs extraction then
-  # classification (milestones 6-7). Escalation/write-path land in
-  # milestones 8-9.
+  # Reasoning service: consumes wiki.edits.enriched, runs extraction,
+  # classification, and confidence-gated escalation (milestones 6-8). The
+  # Postgres write path lands in milestone 9.
   reasoning_service:
     build: ./reasoning_service
     container_name: reasoning_service

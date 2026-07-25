@@ -43,16 +43,28 @@ def call_llm_with_json_retry(
     max_retries: int = 1,
 ) -> tuple[dict, bool, str]:
     """Calls llm_call() (which should return raw model text), extracts and
-    parses the first JSON block. On malformed output, retries llm_call() up
-    to max_retries times. If still malformed, returns a copy of `fallback`
-    with ok=False — the raw output of the last attempt is always returned so
-    the caller can log it.
+    parses the first JSON block. On malformed output OR a network-level
+    failure (timeout, connection error — a single slow model response
+    shouldn't take down the whole consumer loop), retries llm_call() up to
+    max_retries times. If it still fails, returns a copy of `fallback` with
+    ok=False — the raw output/error of the last attempt is always returned
+    so the caller can log it.
 
     Returns (result_dict, ok, raw_output_of_last_attempt).
     """
     raw = ""
     for attempt in range(max_retries + 1):
-        raw = llm_call()
+        try:
+            raw = llm_call()
+        except Exception as exc:  # noqa: BLE001 - any transport failure is retry-worthy here
+            raw = f"<llm call failed: {exc!r}>"
+            logger.warning(
+                "LLM call failed (attempt %d/%d): %s",
+                attempt + 1,
+                max_retries + 1,
+                exc,
+            )
+            continue
         parsed = extract_json_block(raw)
         if parsed is not None:
             return parsed, True, raw
