@@ -56,7 +56,7 @@ Built incrementally, milestone by milestone. See commit history for progress.
 bash
 cp .env.example .env
 ```
-'.env.example' already has a working 'WIKI_USER_AGENT' in it. Since Wikipedia blocks requests that don't seem like they're coming from a real person, the header is needed to prevent 403 errors. You can change the email if you want it to be yours.
+`.env.example` already has a working `WIKI_USER_AGENT` in it. Since Wikipedia blocks requests that don't seem like they're coming from a real person, the header is needed to prevent 403 errors. You can change the email if you want it to be yours.
 
 ### Run it
 ```
