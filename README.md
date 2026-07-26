@@ -52,49 +52,54 @@ Built incrementally, milestone by milestone. See commit history for progress.
 - Docker Desktop Running
 
 ### First-time setup
-\```bash
+```
+bash
 cp .env.example .env
-\```
+```
 '.env.example' already has a working 'WIKI_USER_AGENT' in it. Since Wikipedia blocks requests that don't seem like they're coming from a real person, the header is needed to prevent 403 errors. You can change the email if you want it to be yours.
 
 ### Run it
-\```bash
+```
+bash
 docker compose up -d --build
-\```
+```
 Starts 6 containers: `redpanda`, `ollama`, `connect`, `postgres`, `reasoning_service`, `serve_layer`.
 
 ### Verify it's working
-\```bash
+```
+bash
 docker compose logs reasoning_service -f
-\```
+```
 Look for `extraction_ok=...`, `classification_ok=... label=... confidence=...`, and `upserted status=...` lines.
 
-\```bash
+```
+bash
 docker compose exec postgres psql -U wiki -d wiki_edits -c \
   "SELECT revision_id, article_title, label, confidence, status FROM edit_classifications ORDER BY updated_at DESC LIMIT 10;"
-\```
+```
 
 Web page: `http://localhost:8080/` 
 JSON: `curl http://localhost:8080/api/classifications?status=review`
 
 ### Clean restart
-\```bash
+```
+bash
 docker compose down -v   # wipes Postgres data + Ollama model cache too
 docker compose up -d --build
-\```
+```
 
 ## Tradeoffs
-** Local 1B model as the default, no API key needed.* Running `docker compose up` works with a small free model. That being said, it's not great at following instructions. I notcied this especially during testing when it sometimes copied the placeholder text from the JSON schema instead of writing real content. It almost always sputs out the same 0.90 confidence score no matter what its looking at. I will say that the code does not crash when this happens, it fauls safely. Swapping in a hosted model like Anthropic would probably have better results, but that requires an API key.
+**Local 1B model as the default, no API key needed.** Running `docker compose up` works with a small free model. That being said, it's not great at following instructions. I notcied this especially during testing when it sometimes copied the placeholder text from the JSON schema instead of writing real content. It almost always sputs out the same 0.90 confidence score no matter what its looking at. I will say that the code does not crash when this happens, it fauls safely. Swapping in a hosted model like Anthropic would probably have better results, but that requires an API key.
 
-** Nothing is running in parallel - only one worker ** There's a single process which is handling records one at a time. Each record needs 1 to 3 calls to the LLM. Wiki produces edits faster than this process can handle them. This means the backlog just grows. For example, when testing, it was about 200 messages behind in the first 15 minutes. This is obviously fine for a demo, but if it were to scale we would need multiple workers running asynchronously. 
+**Nothing is running in parallel - only one worker** There's a single process which is handling records one at a time. Each record needs 1 to 3 calls to the LLM. Wiki produces edits faster than this process can handle them. This means the backlog just grows. For example, when testing, it was about 200 messages behind in the first 15 minutes. This is obviously fine for a demo, but if it were to scale we would need multiple workers running asynchronously. 
 
-** The 0.6 confidence cutoff ** The rule that decides when to escalate and edit for a closer look has nevver been checked against real examples.
+**The 0.6 confidence cutoff** The rule that decides when to escalate and edit for a closer look has nevver been checked against real examples.
 
-** No connection pooling for the database ** Every request opens a brand new Postgres connection from scratch. This is again, fine for the demo, but needs to be optimized for a real load of requests. 
+**No connection pooling for the database** Every request opens a brand new Postgres connection from scratch. This is again, fine for the demo, but needs to be optimized for a real load of requests. 
 
-** Every edit that survives filtering gets its diff pulled, no exceptions ** Aside from filtering out bots, non-article pages, and heartbeat messages, everything else triggers a Wikipedia API call to fetch the diff. This step becomes a bottleneck at full Wiki volume
+**Every edit that survives filtering gets its diff pulled, no exceptions** Aside from filtering out bots, non-article pages, and heartbeat messages, everything else triggers a Wikipedia API call to fetch the diff. This step becomes a bottleneck at full Wiki volume
 
-** No way to see when things are failing ** If extraction or classification keeps failing on a record, it just gets labeled as `unclear` and the raw model output gets logged somewhere. 
+**No way to see when things are failing** If extraction or classification keeps failing on a record, it just gets labeled as `unclear` and the raw model output gets logged somewhere. 
 
 ## What surprised you
 
